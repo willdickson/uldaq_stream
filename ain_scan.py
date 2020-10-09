@@ -37,8 +37,11 @@ from sys import stdout
 from uldaq import (get_daq_device_inventory, DaqDevice, AInScanFlag, ScanStatus,
                    ScanOption, create_float_buffer, InterfaceType, AiInputMode)
 
-
-
+done = False
+def sigint_handler(sig, frame):
+    global done
+    done = True
+signal.signal(signal.SIGINT,sigint_handler)
 
 def main():
 
@@ -60,12 +63,6 @@ def main():
     scan_options = ScanOption.CONTINUOUS
     flags = AInScanFlag.DEFAULT
     datafile = 'data.txt'
-
-    done = False
-    def sigint_handler(sig, frame):
-        nonlocal done
-        done = True
-    signal.signal(signal.SIGINT,sigint_handler)
 
     try:
         # Get descriptors for all of the available DAQ devices.
