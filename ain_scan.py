@@ -29,16 +29,19 @@ Steps:
     process.
 """
 from __future__ import print_function
+import signal
 from time import sleep
 from os import system
 from sys import stdout
-import rospy
 
 from uldaq import (get_daq_device_inventory, DaqDevice, AInScanFlag, ScanStatus,
                    ScanOption, create_float_buffer, InterfaceType, AiInputMode)
 
 
+
+
 def main():
+
     """Analog input scan example."""
     daq_device = None
     ai_device = None
@@ -48,15 +51,21 @@ def main():
     range_index = 0
     interface_type = InterfaceType.ANY
     low_channel = 0
-    high_channel = 1
+    high_channel = 3
     rate = 20000          # sample rate
     dt = 0.1              # how often save a chunk of data 
     buffer_margin = 20
     samples_per_channel = int(buffer_margin*dt*rate) 
+    print(samples_per_channel)
     scan_options = ScanOption.CONTINUOUS
     flags = AInScanFlag.DEFAULT
     datafile = 'data.txt'
 
+    done = False
+    def sigint_handler(sig, frame):
+        nonlocal done
+        done = True
+    signal.signal(signal.SIGINT,sigint_handler)
 
     try:
         # Get descriptors for all of the available DAQ devices.
@@ -90,7 +99,10 @@ def main():
         print('\nConnecting to', descriptor.dev_string, '- please wait...')
         # For Ethernet devices using a connection_code other than the default
         # value of zero, change the line below to enter the desired code.
-        daq_device.connect(connection_code=0)
+        try:
+            daq_device.connect(connection_code=0)
+        except TypeError:
+            daq_device.connect()
 
         # The default input mode is SINGLE_ENDED.
         input_mode = AiInputMode.SINGLE_ENDED
@@ -120,77 +132,53 @@ def main():
         print('    Samples per channel: ', samples_per_channel)
         print('    Rate: ', rate, 'Hz')
         print('    Scan options:', display_scan_options(scan_options))
-        #try:
-        #    input('\nHit ENTER to continue\n')
-        #except (NameError, SyntaxError):
-        #    pass
-
-        #system('clear')
 
         # Start the acquisition.
-        rate = ai_device.a_in_scan(low_channel, high_channel, input_mode,
-                                   ranges[range_index], samples_per_channel,
-                                   rate, scan_options, flags, data)
-
-        
+        rate = ai_device.a_in_scan(
+                low_channel, 
+                high_channel, 
+                input_mode, 
+                ranges[range_index], 
+                samples_per_channel, 
+                rate, 
+                scan_options, 
+                flags, 
+                data
+                ) 
 
         print()
         print('acquiring data ..', end='')
         stdout.flush()
+
         with open(datafile,'w') as f:
 
             save_count = 0
             last_save_index = 0
             buffer_size = samples_per_channel*channel_count
-            try:
-                while True:
-                    try:
-                        # Get the status of the background operation
-                        status, transfer_status = ai_device.get_scan_status()
-                        index = transfer_status.current_index
-                        
-                        #reset_cursor()
-                        #print('Please enter CTRL + C to terminate the process\n')
-                        #print('Active DAQ device: ', descriptor.dev_string, ' (', descriptor.unique_id, ')\n', sep='')
-                        #print('actual scan rate = ', '{:.6f}'.format(rate), 'Hz\n')
 
-                        #print('currentTotalCount = ', transfer_status.current_total_count)
-                        #print('currentScanCount = ', transfer_status.current_scan_count)
-                        #print('currentIndex = ', index, '\n')
+            while not done:
 
-                        ## Display the data.
-                        #for i in range(channel_count):
-                        #    clear_eol()
-                        #    print('chan =', i + low_channel, ': ', '{:.6f}'.format(data[index + i])) 
+                # Get the status of the background operation
+                status, transfer_status = ai_device.get_scan_status()
+                current_index = transfer_status.current_index
+                if current_index < 0:
+                    continue
+                num_to_save = (current_index - last_save_index)%buffer_size + channel_count
 
-                        save_to_index = index
-                        while save_to_index%channel_count != 0:
-                            save_to_index = (save_to_index -1)%channel_count 
+                # Write data to file
+                for i in range(num_to_save):
+                    if i%channel_count == 0:
+                        f.write('{} '.format(save_count))
+                        save_count += 1
+                    save_index = (last_save_index + i)%buffer_size
+                    f.write('{}'.format(data[save_index])) 
+                    if i%channel_count == (channel_count-1):
+                        f.write('\n')
+                    else:
+                        f.write(' ')
+                last_save_index = (current_index + channel_count)%buffer_size
 
-                        num_to_save = (save_to_index - last_save_index)%buffer_size
-
-                        for i in range(num_to_save):
-                            if i%channel_count == 0:
-                                f.write('{} '.format(save_count))
-                                save_count += 1
-                            save_index = (last_save_index + i)%buffer_size
-                            f.write('{}'.format(data[save_index])) 
-                            if i%channel_count == (channel_count-1):
-                                f.write('\n')
-                            else:
-                                f.write(' ')
-                        last_save_index = save_to_index 
-
-
-
-
-
-                        sleep(0.1)
-                    except (ValueError, NameError, SyntaxError):
-                        break
-            except KeyboardInterrupt:
-                pass
-
+                sleep(dt)
             print('done')
 
 
