@@ -1,33 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: UTF-8 -*-
-
-"""
-Wrapper call demonstrated:        ai_device.a_in_scan()
-
-Purpose:                          Performs a continuous scan of the range
-                                  of A/D input channels
-
-Demonstration:                    Displays the analog input data for the
-                                  range of user-specified channels using
-                                  the first supported range and input mode
-
-Steps:
-1.  Call get_daq_device_inventory() to get the list of available DAQ devices
-2.  Create a DaqDevice object
-3.  Call daq_device.get_ai_device() to get the ai_device object for the AI
-    subsystem
-4.  Verify the ai_device object is valid
-5.  Call ai_device.get_info() to get the ai_info object for the AI subsystem
-6.  Verify the analog input subsystem has a hardware pacer
-7.  Call daq_device.connect() to establish a UL connection to the DAQ device
-8.  Call ai_device.a_in_scan() to start the scan of A/D input channels
-9.  Call ai_device.get_scan_status() to check the status of the background
-    operation
-10. Display the data for each channel
-11. Call ai_device.scan_stop() to stop the background operation
-12. Call daq_device.disconnect() and daq_device.release() before exiting the
-    process.
-"""
 from __future__ import print_function
 import signal
 from time import sleep
@@ -43,7 +13,8 @@ def sigint_handler(sig, frame):
     done = True
 signal.signal(signal.SIGINT,sigint_handler)
 
-def main():
+
+def stream(low_channel, high_channel, sample_rate, data_file):
 
     """Analog input scan example."""
     daq_device = None
@@ -51,18 +22,13 @@ def main():
     status = ScanStatus.IDLE
     device_number = 0
 
+    dt = 0.1   # how often save a chunk of data 
     range_index = 0
-    interface_type = InterfaceType.ANY
-    low_channel = 0
-    high_channel = 3
-    rate = 20000          # sample rate
-    dt = 0.1              # how often save a chunk of data 
     buffer_margin = 20
-    samples_per_channel = int(buffer_margin*dt*rate) 
-    print(samples_per_channel)
+    interface_type = InterfaceType.ANY
+    samples_per_channel = int(buffer_margin*dt*sample_rate) 
     scan_options = ScanOption.CONTINUOUS
     flags = AInScanFlag.DEFAULT
-    datafile = 'data.txt'
 
     try:
         # Get descriptors for all of the available DAQ devices.
@@ -122,22 +88,22 @@ def main():
         data = create_float_buffer(channel_count, samples_per_channel)
 
         print('\n', descriptor.dev_string, ' ready', sep='')
-        print('    Function demonstrated: ai_device.a_in_scan()')
+        print('    Function demonstsample_rated: ai_device.a_in_scan()')
         print('    Channels: ', low_channel, '-', high_channel)
         print('    Input mode: ', input_mode.name)
         print('    Range: ', ranges[range_index].name)
         print('    Samples per channel: ', samples_per_channel)
-        print('    Rate: ', rate, 'Hz')
+        print('    Rate: ', sample_rate, 'Hz')
         print('    Scan options:', display_scan_options(scan_options))
 
         # Start the acquisition.
-        rate = ai_device.a_in_scan(
+        sample_rate = ai_device.a_in_scan(
                 low_channel, 
                 high_channel, 
                 input_mode, 
                 ranges[range_index], 
                 samples_per_channel, 
-                rate, 
+                sample_rate, 
                 scan_options, 
                 flags, 
                 data
@@ -147,7 +113,7 @@ def main():
         print('acquiring data ..', end='')
         stdout.flush()
 
-        with open(datafile,'w') as f:
+        with open(data_file,'w') as f:
 
             save_count = 0
             last_save_index = 0
@@ -214,6 +180,3 @@ def clear_eol():
     stdout.write('\x1b[2K')
 
 
-if __name__ == '__main__':
-
-    main()
